@@ -33,7 +33,7 @@ export async function getOrCreateContest(city: string, heatLevel: number) {
   // Build a data object that *satisfies* the expected Prisma type
   const data: Prisma.ContestCreateInput = {
     scope: ContestScope.CITY,
-    regionCode: city,
+    // regionCode: city,
     heatLevel,
     frequency,
     prizeMin: heatLevel >= 4 ? 100 : 50,
