@@ -2,45 +2,42 @@ import { prisma } from '../db';
 import { ContestFreq, ContestScope, Prisma } from '@prisma/client';
 import { DateTime } from 'luxon';
 
-export async function getOrCreateContest(city: string, heatLevel: number) {
-  // Use Prisma enum values, not bare strings
+export async function getOrCreateContest(cityCode: string, heatLevel: number) {
   const frequency: ContestFreq =
     heatLevel >= 4 ? ContestFreq.DAILY : ContestFreq.WEEKLY;
 
   const now = DateTime.now();
+  const startLux = frequency === ContestFreq.DAILY ? now.startOf('day') : now.startOf('week');
+  const endLux   = frequency === ContestFreq.DAILY ? now.endOf('day')   : now.endOf('week');
+  const startAt: Date = startLux.toJSDate();
+  const endAt: Date = endLux.toJSDate();
 
-  // Force proper typing to Date to avoid `any`
-  const startAt: Date = (
-    frequency === ContestFreq.DAILY ? now.startOf('day') : now.startOf('week')
-  ).toJSDate();
-
-  const endAt: Date = (
-    frequency === ContestFreq.DAILY ? now.endOf('day') : now.endOf('week')
-  ).toJSDate();
-
+  // You may filter by FK scalar in where:
   const existing = await prisma.contest.findFirst({
     where: {
       scope: ContestScope.CITY,
-      regionCode: city,
+      regionCode: cityCode,
+      frequency,
       startAt: { lte: now.toJSDate() },
-      endAt: { gte: now.toJSDate() },
-      frequency, // optional, but keeps it consistent with create
+      endAt:   { gte: now.toJSDate() },
     },
   });
-
   if (existing) return existing;
 
-  // Build a data object that *satisfies* the expected Prisma type
-  const data: Prisma.ContestCreateInput = {
-    scope: ContestScope.CITY,
-    regionCode: city,
-    heatLevel,
-    frequency,
-    prizeMin: heatLevel >= 4 ? 100 : 50,
-    prizeMax: heatLevel >= 4 ? 500 : 200,
-    startAt,
-    endAt,
-  };
+  const title = `${cityCode} ${frequency === ContestFreq.DAILY ? 'Daily' : 'Weekly'} ${startLux.toISODate()}`;
 
-  return prisma.contest.create({ data });
+  return prisma.contest.create({
+    data: {
+      title,
+      scope: ContestScope.CITY,
+      heatLevel,
+      frequency,
+      prizeMin: heatLevel >= 4 ? 100 : 50,
+      prizeMax: heatLevel >= 4 ? 500 : 200,
+      startAt,
+      endAt,
+      // 👇 must set the relation (checked create hides regionCode)
+      region: { connect: { code: cityCode } },
+    } satisfies Prisma.ContestCreateInput,
+  });
 }
